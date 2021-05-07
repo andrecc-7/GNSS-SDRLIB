@@ -17,18 +17,6 @@ void syncinit()
 {
     init = 1;
 
-    /* start tcp server (rtcm) */
-    //if (sdrini.rtcm) {
-    //    sdrout.soc_rtcm.port=sdrini.rtcmport;
-    //    tcpsvrstart(&sdrout.soc_rtcm);
-    //}
-    
-    /* start tcp server (sbas) */
-    //if (sdrini.sbas) {
-    //    sdrout.soc_sbas.port=sdrini.sbasport;
-    //   tcpsvrstart(&sdrout.soc_sbas);
-    //}
-
     /* rinex output setting */
     if (sdrini.rinex) {
         createrinexopt(&sdrout.opt);
@@ -56,11 +44,7 @@ void syncquit()
 * note : this thread collects all data of sdr channel thread and compute pseudo
 *        range at every output timing.
 *-----------------------------------------------------------------------------*/
-#ifdef WIN32
-extern void syncthread(void * arg)
-#else
 extern void *syncthread(void * arg)
-#endif
 {
     if(!init) syncinit();
 
@@ -68,8 +52,6 @@ extern void *syncthread(void * arg)
         syncquit();
         return;
     }
-
-    mlock(hobsmtx);
 
     /* copy all tracking data */
     for (i=nsat=0;i<sdrini.nch;i++) {
@@ -79,8 +61,6 @@ extern void *syncthread(void * arg)
             nsat++;
         }
     }
-
-    unmlock(hobsmtx);
 
     /* find minimum tow channel (most distant satellite) */
     oldreftow=reftow;

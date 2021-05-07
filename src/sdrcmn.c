@@ -5,6 +5,7 @@
 * Copyright (C) 2014 T. Takasu <http://www.rtklib.com>
 *-----------------------------------------------------------------------------*/
 #include "sdr.h"
+#include "fft_c.h"
 
 #define CDIV          32               /* carrier lookup table (cycle) */
 #define CMASK         0x1F             /* carrier lookup table mask */
@@ -139,20 +140,28 @@ extern void cpxfree(cpx_t *cpx)
 *-----------------------------------------------------------------------------*/
 extern void cpxfft(fftwf_plan plan, cpx_t *cpx, int n)
 {
-#ifdef FFTMTX
-        mlock(hfftmtx);
-#endif
-    if (plan==NULL) {
-        fftwf_plan_with_nthreads(NFFTTHREAD); /* fft execute in multi threads */
-        plan=fftwf_plan_dft_1d(n,cpx,cpx,FFTW_FORWARD,FFTW_ESTIMATE);
-        fftwf_execute_dft(plan,cpx,cpx); /* fft */
-        fftwf_destroy_plan(plan);
-    } else {
-        fftwf_execute_dft(plan,cpx,cpx); /* fft */
+	if(n <= 0)
+		return;
+
+	float *cpxv[4];	
+	int i, j, m = log2(n), p = pow(2, m+1);
+
+	for(i = 0; i < 4; i++) // complex input and complex output
+		cpxv[i] = (float*) calloc(p, sizeof(float));
+
+	for(i = 0; i < n; i++) // copy to input
+		for(j = 0; j < 2; j++)
+			cpxv[j][i] = ((float*) cpx)[2*i + j];
+
+	fft_c(cpxv[0], cpxv[1], cpxv[2], cpxv[3], m+1);
+
+	for(i = 0; i < n; i++) { // copy from output
+        ((float*) cpx)[2*i + 0] = cpxv[2][i];
+        ((float*) cpx)[2*i + 1] = cpxv[3][i];
     }
-#ifdef FFTMTX
-        unmlock(hfftmtx);
-#endif
+
+	for(i = 0; i < 4; i++) // complex input and complex output
+		free(cpxv[i]);
 }
 /* complex IFFT ----------------------------------------------------------------
 * cpx=ifft(cpx)
@@ -163,21 +172,28 @@ extern void cpxfft(fftwf_plan plan, cpx_t *cpx, int n)
 *-----------------------------------------------------------------------------*/
 extern void cpxifft(fftwf_plan plan, cpx_t *cpx, int n)
 {
-#ifdef FFTMTX
-        mlock(hfftmtx);
-#endif
-    if (plan==NULL) {
-        fftwf_plan_with_nthreads(NFFTTHREAD); /* fft execute in multi threads */
-        plan=fftwf_plan_dft_1d(n,cpx,cpx,FFTW_BACKWARD,FFTW_ESTIMATE);
-        fftwf_execute_dft(plan,cpx,cpx); /* fft */
-        fftwf_destroy_plan(plan);
-    } else {
-        fftwf_execute_dft(plan,cpx,cpx); /* fft */
-    }
-#ifdef FFTMTX
-        unmlock(hfftmtx);
-#endif
+	if(n <= 0)
+		return;
 
+	float *cpxv[4];	
+	int i, j, m = log2(n), p = pow(2, m+1);
+	
+	for(i = 0; i < 4; i++) // complex input and complex output
+		cpxv[i] = (float*) calloc(p, sizeof(float));
+
+	for(i = 0; i < n; i++)
+		for(j = 0; j < 2; j++)
+			cpxv[j][i] = ((float*) cpx)[2*i + j];
+
+	ifft_c(cpxv[0], cpxv[1], cpxv[2], cpxv[3], m+1);
+
+	for(i = 0; i < n; i++) {
+        ((float*) cpx)[2*i + 0] =   cpxv[2][i];
+        ((float*) cpx)[2*i + 1] = - cpxv[3][i];
+    }
+
+	for(i = 0; i < 4; i++) // complex input and complex output
+		free(cpxv[i]);
 }
 /* convert short vector to complex vector --------------------------------------
 * cpx=complex(I,Q)

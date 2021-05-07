@@ -9,12 +9,13 @@ USE_BLADERF=0
 
 SRC=../../src
 RTKLIB=../../lib/rtklib
+SIMPLE_FFT=../../lib/simple-fft
 FEC=../../lib/fec
 STEREO=../../src/rcv/stereo
 RTLSDR=../../src/rcv/rtlsdr
 BLADERF=../../src/rcv/bladerf
 
-INCLUDE=-I$(SRC) -I$(RTKLIB) -I$(FEC) -I$(STEREO) -I$(RTLSDR) -I$(BLADERF)
+INCLUDE=-I$(SRC) -I$(RTKLIB) -I$(FEC) -I$(STEREO) -I$(RTLSDR) -I$(BLADERF) -I$(SIMPLE_FFT)
 
 CC=gcc -no-pie
 OPTIONS=-DSSE2_ENABLE -DFFTMTX -DSTEREO -DSTEREOV26
@@ -24,7 +25,8 @@ LIBS=$(STEREO)/linux/libnslstereo.a $(FEC)/linux/libfec.a
 OBS= sdrmain.o sdrcmn.o sdracq.o sdrcode.o sdrinit.o sdrnav.o\
      sdrnav_gps.o sdrnav_glo.o sdrnav_gal.o sdrnav_bds.o sdrnav_sbs.o\
      sdrout.o sdrplot.o sdrrcv.o sdrspec.o sdrtrk.o sdrlex.o\
-     sdrsync.o stereo.o rtkcmn.o rtcm.o rtcm2.o rtcm3.o rtcm3e.o rinex.o
+     sdrsync.o stereo.o rtkcmn.o rtcm.o rtcm2.o rtcm3.o rtcm3e.o rinex.o\
+	 fft_c.o
 
 ifeq ($(USE_RTLSDR),1)
 OPTIONS+=-DRTLSDR
@@ -46,6 +48,8 @@ $(BIN): $(OBS)
 	 $(CC) -o $(BIN) $(OBS) $(CFLAGS) $(LDLIBS)
 	 @cp $(BIN) ../../bin
 
+fft_c.o: $(SIMPLE_FFT)/fft_c.c
+	$(CC) -c $(CFLAGS) $(SIMPLE_FFT)/fft_c.c
 sdrmain.o: $(SRC)/sdrmain.c
 	$(CC) -c $(CFLAGS) $(SRC)/sdrmain.c
 sdrcmn.o : $(SRC)/sdrcmn.c
@@ -103,6 +107,7 @@ convenience.o : $(RTLSDR)/convenience.c
 bladerf.o : $(BLADERF)/bladerf.c
 	$(CC) -c $(CFLAGS) $(BLADERF)/bladerf.c
 
+fft_c.o: $(SIMPLE_FFT)/fft_c.h
 sdrmain.o: $(SRC)/sdr.h
 sdrcmn.o : $(SRC)/sdr.h
 sdracq.o : $(SRC)/sdr.h
