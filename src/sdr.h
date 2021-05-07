@@ -18,6 +18,10 @@
 #include <stdarg.h>
 #include <ctype.h>
 
+#include <pthread.h>
+#include <stdbool.h>
+#include <inttypes.h>
+
 /* SIMD (SSE2_ENABLE) */
 #if defined(SSE2_ENABLE)
 #include <emmintrin.h>
@@ -29,80 +33,11 @@
 #include <immintrin.h>
 #endif
 
-/* for windows ---------------------------------------------------------------*/
-#ifdef WIN32
-
-#include <windows.h>
-#include <process.h>
-#include <shlwapi.h>
-#include <shlobj.h>
-#include <locale.h>
-#pragma comment(lib,"winmm.lib")
-#pragma comment(lib,"ws2_32.lib")
-#pragma comment(lib,"shell32.lib")
-#pragma comment(lib,"User32.lib")
-#pragma comment(lib,"fec/libfec.a")
-#pragma comment(lib,"fft/libfftw3f-3.lib")
-#pragma comment(lib,"usb/libusb.lib")
-#pragma comment(lib,"stereo/libnslstereo.a")
-#pragma comment(lib,"bladerf/bladeRF.lib")
-#pragma comment(lib,"rtlsdr/rtlsdr.lib")
-
-#include "fec/fec.h"
-#include "fft/fftw3.h"
-#include "rtklib/rtklib.h"
-#include "usb/lusb0_usb.h"
-#include "stereo/stereo.h"
-#include "gn3s/gn3s.h"
-#include "bladerf/libbladeRF.h"
-#include "rtlsdr/rtl-sdr.h"
-
-#if defined(GUI)
-#include "../gui/gnss-sdrgui/maindlg.h"
-using namespace gnsssdrgui;
-#endif
-
-/* printf function */
-#if defined(GUI)
-#define SDRPRINTF(...) \
-    do { \
-    char str[1024]; \
-    sprintf(str,__VA_ARGS__);  \
-    maindlg^form=static_cast<maindlg^>(hform.Target); \
-    String^ strstr = gcnew String(str); \
-    form->mprintf(strstr); \
-    } while (0)
-#else
-#define SDRPRINTF printf
-#endif 
-
-/* for linux -----------------------------------------------------------------*/
-#else
-
-#include <pthread.h>
-#include <sys/socket.h>
-#include <stdbool.h>
-#include <inttypes.h>
-
 #include "fec.h"
 #include "rtklib.h"
 #include "libusb-1.0/libusb.h"
-#ifdef STEREO
-#include "stereo.h"
-#endif
-#ifdef GN3S
-#include "gn3s.h"
-#endif
-#ifdef BLADERF
-#include "libbladeRF.h"
-#endif
-#ifdef RTLSDR
-#include "rtl-sdr.h"
-#endif
 
 #define SDRPRINTF printf
-
-#endif /* defined(WIN32) */
 
 #ifdef __cplusplus
 extern "C" {
@@ -136,13 +71,7 @@ extern "C" {
 #define DTYPEI        1                /* sampling type: real */
 #define DTYPEIQ       2                /* sampling type: real+imag */
 
-#ifdef STEREOV26
-#define STEREO_DATABUFF_SIZE STEREO_PKT_SIZE
-#define MEMBUFFLEN    (STEREO_NUM_BLKS*32)
-                                       /* number of temporary buffer */
-#else
 #define MEMBUFFLEN    5000             /* number of temporary buffer */
-#endif
 
 #define FILE_BUFFSIZE 65536            /* buffer size for post processing */
 

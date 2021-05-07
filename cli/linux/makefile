@@ -20,28 +20,18 @@ INCLUDE=-I$(SRC) -I$(RTKLIB) -I$(FEC) -I$(STEREO) -I$(RTLSDR) -I$(BLADERF) -I$(S
 CC=gcc -no-pie
 OPTIONS=-DSSE2_ENABLE -DFFTMTX -DSTEREO -DSTEREOV26
 
-LIBS=$(STEREO)/linux/libnslstereo.a $(FEC)/linux/libfec.a
+LIBS=$(FEC)/linux/libfec.a
+# $(STEREO)/linux/libnslstereo.a
 
 OBS= sdrmain.o sdrcmn.o sdracq.o sdrcode.o sdrinit.o sdrnav.o\
      sdrnav_gps.o sdrnav_glo.o sdrnav_gal.o sdrnav_bds.o sdrnav_sbs.o\
-     sdrout.o sdrplot.o sdrrcv.o sdrspec.o sdrtrk.o sdrlex.o\
-     sdrsync.o stereo.o rtkcmn.o rtcm.o rtcm2.o rtcm3.o rtcm3e.o rinex.o\
-	 fft_c.o
-
-ifeq ($(USE_RTLSDR),1)
-OPTIONS+=-DRTLSDR
-LIBS+=-lrtlsdr
-OBS+=rtlsdr.o convenience.o
-endif
-
-ifeq ($(USE_BLADERF),1)
-OPTIONS+=-DBLADERF
-LIBS+=-lbladeRF
-OBS+=bladerf.o
-endif
+     sdrout.o sdrrcv.o sdrtrk.o\
+     sdrsync.o rtkcmn.o rtcm.o rtcm2.o rtcm3.o rtcm3e.o rinex.o\
+	 fft_c.o sdrlex.o
+# sdrspec.o sdrplot.o stereo.o
 
 CFLAGS=-Wall -O3 -march=native $(INCLUDE) $(OPTIONS) -g
-LDLIBS=-lm -lrt -lpthread $(LIBS) -lusb-1.0
+LDLIBS=-lm -lrt $(LIBS) -lusb-1.0 -lpthread
 # -lfftw3f -lfftw3f_threads
 
 BIN= gnss-sdrcli
@@ -75,12 +65,12 @@ sdrnav_bds.o : $(SRC)/sdrnav_bds.c
 	$(CC) -c $(CFLAGS) $(SRC)/sdrnav_bds.c
 sdrnav_sbs.o : $(SRC)/sdrnav_sbs.c
 	$(CC) -c $(CFLAGS) $(SRC)/sdrnav_sbs.c
-sdrplot.o: $(SRC)/sdrplot.c
-	$(CC) -c $(CFLAGS) $(SRC)/sdrplot.c
+#sdrplot.o: $(SRC)/sdrplot.c
+#	$(CC) -c $(CFLAGS) $(SRC)/sdrplot.c
 sdrrcv.o : $(SRC)/sdrrcv.c
 	$(CC) -c $(CFLAGS) $(SRC)/sdrrcv.c
-sdrspec.o: $(SRC)/sdrspec.c
-	$(CC) -c $(CFLAGS) $(SRC)/sdrspec.c
+#sdrspec.o: $(SRC)/sdrspec.c
+#	$(CC) -c $(CFLAGS) $(SRC)/sdrspec.c
 sdrtrk.o : $(SRC)/sdrtrk.c
 	$(CC) -c $(CFLAGS) $(SRC)/sdrtrk.c
 sdrlex.o : $(SRC)/sdrlex.c
@@ -99,8 +89,8 @@ rtcm3e.o   : $(RTKLIB)/rtcm3e.c
 	$(CC) -c $(CFLAGS) $(RTKLIB)/rtcm3e.c
 rinex.o    : $(RTKLIB)/rinex.c
 	$(CC) -c $(CFLAGS) $(RTKLIB)/rinex.c
-stereo.o : $(STEREO)/stereo.c
-	$(CC) -c $(CFLAGS) $(STEREO)/stereo.c
+#stereo.o : $(STEREO)/stereo.c
+#	$(CC) -c $(CFLAGS) $(STEREO)/stereo.c
 rtlsdr.o : $(RTLSDR)/rtlsdr.c
 	$(CC) -c $(CFLAGS) $(RTLSDR)/rtlsdr.c
 convenience.o : $(RTLSDR)/convenience.c
@@ -121,9 +111,9 @@ sdrnav_glo.o : $(SRC)/sdr.h
 sdrnav_gal.o : $(SRC)/sdr.h
 sdrnav_bds.o : $(SRC)/sdr.h
 sdrnav_sbs.o : $(SRC)/sdr.h
-sdrplot.o: $(SRC)/sdr.h
+#sdrplot.o: $(SRC)/sdr.h
 sdrrcv.o : $(SRC)/sdr.h
-sdrspec.o: $(SRC)/sdr.h
+#sdrspec.o: $(SRC)/sdr.h
 sdrtrk.o : $(SRC)/sdr.h
 sdrlex.o : $(SRC)/sdr.h
 sdrsync.o: $(SRC)/sdr.h
@@ -133,7 +123,7 @@ rtcm2.o : $(SRC)/sdr.h
 rtcm3.o : $(SRC)/sdr.h
 rtcm3e.o: $(SRC)/sdr.h
 rinex.o : $(SRC)/sdr.h
-stereo.o : $(SRC)/sdr.h
+#stereo.o : $(SRC)/sdr.h
 rtlsdr.o : $(SRC)/sdr.h
 convenience.o : $(SRC)/sdr.h
 bladerf.o : $(SRC)/sdr.h

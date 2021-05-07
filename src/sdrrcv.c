@@ -15,59 +15,6 @@ extern int rcvinit(sdrini_t *ini)
     sdrstat.buff=sdrstat.buff2=sdrstat.tmpbuff=NULL;
 
     switch (ini->fend) {
-#ifdef STEREO
-    /* NSL STEREO */
-    case FEND_STEREO: 
-        if (stereo_init()<0) return -1; /* stereo initialization */
-        
-        /* frontend buffer size */
-        sdrstat.fendbuffsize=STEREO_DATABUFF_SIZE; /* frontend buff size */
-        sdrstat.buffsize=STEREO_DATABUFF_SIZE*MEMBUFFLEN; /* total */
-
-        /* memory allocation */
-        sdrstat.buff=(uint8_t*)malloc(sdrstat.buffsize);
-        if (NULL==sdrstat.buff) {
-            SDRPRINTF("error: failed to allocate memory for the buffer\n");
-            return -1;
-        }
-
-#ifdef STEREOV26
-        /* memory allocation */
-        sdrstat.tmpbuff=(uint8_t*)malloc(STEREO_PKT_SIZE*STEREO_NUM_BLKS);
-        if (NULL==sdrstat.tmpbuff) {
-            SDRPRINTF("error: failed to allocate memory for the buffer\n");
-            return -1;
-        }
-        if (STEREO_ConnectEndPoint(L1_EP,sdrstat.tmpbuff,
-                STEREO_PKT_SIZE*STEREO_NUM_BLKS)<0) {
-            SDRPRINTF("error: STEREO_ConnectEndPoint\n");
-            return -1;
-        }
-#else
-        if (STEREO_GrabInit()<0) {
-            SDRPRINTF("error: STEREO_GrabInit\n");
-            return -1;
-        }
-#endif /* STEREOV26 */
-        break;
-    /* STEREO Binary File */
-    case FEND_FSTEREO: 
-        /* IF file open */
-        if ((ini->fp1 = fopen(ini->file1,"rb"))==NULL){
-            SDRPRINTF("error: failed to open file : %s\n",ini->file1);
-            return -1;
-        }
-        sdrstat.fendbuffsize=STEREO_DATABUFF_SIZE; /* frontend buff size */
-        sdrstat.buffsize=STEREO_DATABUFF_SIZE*MEMBUFFLEN; /* total */
-
-        /* memory allocation */
-        sdrstat.buff=(uint8_t*)malloc(sdrstat.buffsize);
-        if (NULL==sdrstat.buff) {
-            SDRPRINTF("error: failed to allocate memory for the buffer\n");
-            return -1;
-        }
-        break;
-#endif
 #ifdef GN3S
     /* SiGe GN3S v2/v3 */
     case FEND_GN3SV2: 
@@ -229,12 +176,6 @@ extern int rcvinit(sdrini_t *ini)
 extern int rcvquit(sdrini_t *ini)
 {
     switch (ini->fend) {
-#ifdef STEREO
-    /* NSL stereo */
-    case FEND_STEREO: 
-        stereo_quit();
-        break;
-#endif
 #ifdef GN3S
     /* SiGe GN3S v2/v3 */
     case FEND_GN3SV2:
@@ -309,45 +250,6 @@ extern int rcvgrabdata(sdrini_t *ini)
     unsigned long buffcnt=0;
 
     switch (ini->fend) {
-#ifdef STEREO
-    /* NSL stereo */
-    case FEND_STEREO: 
-#ifdef STEREOV26
-        buffcnt=(unsigned int)(sdrstat.buffcnt%MEMBUFFLEN);
-        if (STEREO_ReapPacket(L1_EP,buffcnt, 300)<0) {
-            SDRPRINTF("error: STEREO Buffer overrun...\n");
-            return -1;
-        }
-#else
-        if (STEREO_RefillDataBuffer()<0) {
-            SDRPRINTF("error: STEREO Buffer overrun...\n");
-            return -1;
-        }
-#endif
-        stereo_pushtomembuf(); /* copy to membuffer */
-        break;
-    /* STEREO Binary File */
-    case FEND_FSTEREO: 
-        fstereo_pushtomembuf(); /* copy to membuffer */
-        sleepms(5);
-        break;
-#endif
-#ifdef GN3S
-    /* SiGe GN3S v2/v3 */
-    case FEND_GN3SV2:
-    case FEND_GN3SV3:
-        if (gn3s_pushtomembuf()<0) {
-            SDRPRINTF("error: GN3S Buffer overrun...\n");
-            return -1;
-        }
-        break;
-    /* GN3S Binary File */
-    case FEND_FGN3SV2:
-    case FEND_FGN3SV3: 
-        fgn3s_pushtomembuf(); /* copy to membuffer */
-        sleepms(5);
-        break;
-#endif
 #ifdef BLADERF
     /* Nuand BladeRF */
     case FEND_BLADERF:
@@ -399,16 +301,6 @@ extern int rcvgetbuff(sdrini_t *ini, uint64_t buffloc, int n, int ftype,
                       int dtype, char *expbuf)
 {
     switch (ini->fend) {
-#ifdef STEREO
-    /* NSL STEREO */
-    case FEND_STEREO: 
-        stereo_getbuff(buffloc,n,dtype,expbuf);
-        break;
-    /* STEREO Binary File */
-    case FEND_FSTEREO: 
-        stereo_getbuff(buffloc,n,dtype,expbuf);
-        break;
-#endif
 #ifdef GN3S
     /* SiGe GN3S v2 */
     case FEND_GN3SV2:
