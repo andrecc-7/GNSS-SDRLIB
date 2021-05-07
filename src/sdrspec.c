@@ -274,7 +274,7 @@ extern int spectrumanalyzer(const char *data, int dtype, int n, double f_sf,
             cpxcpxf(xxI,xxQ,1.0,nfft*2,xxx);
 
         /* compute power spectrum */
-        cpxpspec(NULL,xxx,nfft*2,1,s);
+        cpxpspec(xxx,nfft*2,1,s);
     }
     /* frequency and power */
     if (dtype==DTYPEI) {

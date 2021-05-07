@@ -5,9 +5,6 @@
 *-----------------------------------------------------------------------------*/
 #include "sdr.h"
 
-static fftwf_plan  plan=NULL;
-static fftwf_plan iplan=NULL; 
-
 /* LEX correlation function ----------------------------------------------------
 * compute LEX message based on FFT 
 * args   : sdrch_t *sdr     I   sdr channel struct
@@ -51,14 +48,7 @@ uint8_t lexcorr_fft(sdrch_t *sdr, const char *data, int dtype, double ti, int n,
     cpxcpx(dataI,dataQ,(1.0/32)/m,m,datax);
 
     /* convolution */
-    if (plan==NULL||iplan==NULL) {
-        fftwf_plan_with_nthreads(NFFTTHREAD); /* fft execute in multi threads */
-        plan=fftwf_plan_dft_1d(n,datax,datax,FFTW_FORWARD,FFTW_ESTIMATE);
-        
-        fftwf_plan_with_nthreads(NFFTTHREAD); /* fft execute in multi threads */
-        iplan=fftwf_plan_dft_1d(n,datax,datax,FFTW_BACKWARD,FFTW_ESTIMATE);
-    }
-    cpxconv(plan,iplan,datax,codex,m,m,0,P);
+    cpxconv(datax,codex,m,m,0,P);
 
     /* maximum index */
     maxP=maxvd(P,m,-1,-1,&codei);
@@ -135,7 +125,7 @@ void *lexthread(void * arg)
     }
     rescode(sdr->code,sdr->clen,0,0,sdr->ci,sdr->nsamp,rcode); /* resampled code */
     cpxcpx(rcode,NULL,1.0,sdr->nsamp,xcode); /* FFT code */
-    cpxfft(NULL,xcode,sdr->nsamp);
+    cpxfft(xcode,sdr->nsamp);
     sdrfree(rcode);
 
     sleepms(3000*sdrini.nch);

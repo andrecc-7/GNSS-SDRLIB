@@ -41,7 +41,8 @@ OBS+=bladerf.o
 endif
 
 CFLAGS=-Wall -O3 -march=native $(INCLUDE) $(OPTIONS) -g
-LDLIBS=-lm -lrt -lfftw3f -lfftw3f_threads -lpthread $(LIBS) -lusb-1.0
+LDLIBS=-lm -lrt -lpthread $(LIBS) -lusb-1.0
+# -lfftw3f -lfftw3f_threads
 
 BIN= gnss-sdrcli
 $(BIN): $(OBS)

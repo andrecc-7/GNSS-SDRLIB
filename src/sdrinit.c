@@ -734,7 +734,7 @@ extern int initsdrch(int chno, int sys, int prn, int ctype, int dtype,
     for (i=0;i<sdr->acq.nfft;i++) rcode[i]=0; /* zero padding */
     rescode(sdr->code,sdr->clen,0,0,sdr->ci,sdr->nsamp,rcode); /* resampling */
     cpxcpx(rcode,NULL,1.0,sdr->acq.nfft,sdr->xcode); /* FFT for acquisition */
-    cpxfft(NULL,sdr->xcode,sdr->acq.nfft);
+    cpxfft(sdr->xcode,sdr->acq.nfft);
 
     sdrfree(rcode);
     return 0;

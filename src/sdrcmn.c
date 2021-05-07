@@ -120,7 +120,7 @@ extern void sdrfree(void *p)
 *-----------------------------------------------------------------------------*/
 extern cpx_t *cpxmalloc(int n)
 {
-    return (cpx_t *)fftwf_malloc(sizeof(cpx_t)*n+32);
+    return (cpx_t *)malloc(sizeof(cpx_t)*n+32);
 }
 /* complex free ----------------------------------------------------------------
 * free complex data
@@ -129,7 +129,7 @@ extern cpx_t *cpxmalloc(int n)
 *-----------------------------------------------------------------------------*/
 extern void cpxfree(cpx_t *cpx)
 {
-    fftwf_free(cpx);
+    free(cpx);
 }
 /* complex FFT -----------------------------------------------------------------
 * cpx=fft(cpx)
@@ -138,7 +138,7 @@ extern void cpxfree(cpx_t *cpx)
 *          int    n         I   number of input/output data
 * return : none
 *-----------------------------------------------------------------------------*/
-extern void cpxfft(fftwf_plan plan, cpx_t *cpx, int n)
+extern void cpxfft(cpx_t *cpx, int n)
 {
 	if(n <= 0)
 		return;
@@ -170,7 +170,7 @@ extern void cpxfft(fftwf_plan plan, cpx_t *cpx, int n)
 *          int    n         I   number of input/output data
 * return : none
 *-----------------------------------------------------------------------------*/
-extern void cpxifft(fftwf_plan plan, cpx_t *cpx, int n)
+extern void cpxifft(cpx_t *cpx, int n)
 {
 	if(n <= 0)
 		return;
@@ -247,13 +247,13 @@ extern void cpxcpxf(const float *II, const float *QQ, double scale, int n,
 *          double *conv     O   output convolution data
 * return : none
 *-----------------------------------------------------------------------------*/
-extern void cpxconv(fftwf_plan plan, fftwf_plan iplan, cpx_t *cpxa, cpx_t *cpxb,
+extern void cpxconv(cpx_t *cpxa, cpx_t *cpxb,
                     int m, int n, int flagsum, double *conv)
 {
     float *p,*q,real,m2=(float)m*m;
     int i;
 
-    cpxfft(plan,cpxa,m); /* fft */
+    cpxfft(cpxa,m); /* fft */
 
     for (i=0,p=(float *)cpxa,q=(float *)cpxb;i<m;i++,p+=2,q+=2) {
         real=-p[0]*q[0]-p[1]*q[1];
@@ -261,7 +261,7 @@ extern void cpxconv(fftwf_plan plan, fftwf_plan iplan, cpx_t *cpxa, cpx_t *cpxb,
         p[0]=real;
     }
 
-    cpxifft(iplan,cpxa,m); /* ifft */
+    cpxifft(cpxa,m); /* ifft */
 
     if (flagsum) { /* cumulative sum */
         for (i=0,p=(float *)cpxa;i<n;i++,p+=2)
@@ -280,13 +280,13 @@ extern void cpxconv(fftwf_plan plan, fftwf_plan iplan, cpx_t *cpxa, cpx_t *cpxb,
 *          double *pspec    O   output power spectrum data
 * return : none
 *-----------------------------------------------------------------------------*/
-extern void cpxpspec(fftwf_plan plan, cpx_t *cpx, int n, int flagsum,
+extern void cpxpspec(cpx_t *cpx, int n, int flagsum,
                      double *pspec)
 {
     float *p;
     int i;
 
-    cpxfft(plan,cpx,n); /* fft */
+    cpxfft(cpx,n); /* fft */
 
     if (flagsum) { /* cumulative sum */
         for (i=0,p=(float *)cpx;i<n;i++,p+=2)
@@ -1160,7 +1160,7 @@ extern void pcorrelator(const char *data, int dtype, double ti, int n,
         cpxcpx(dataI,dataQ,CSCALE/m,m,datax);
 
         /* convolution */
-        cpxconv(NULL,NULL,datax,codex,m,n,1,&P[i*n]);
+        cpxconv(datax,codex,m,n,1,&P[i*n]);
     }
     sdrfree(dataR);
     sdrfree(dataI);

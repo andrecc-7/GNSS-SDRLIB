@@ -85,7 +85,6 @@ using namespace gnsssdrgui;
 #include <inttypes.h>
 
 #include "fec.h"
-#include "fftw3.h"
 #include "rtklib.h"
 #include "libusb-1.0/libusb.h"
 #ifdef STEREO
@@ -319,7 +318,7 @@ extern "C" {
 #endif
 
 /* type definition -----------------------------------------------------------*/
-typedef fftwf_complex cpx_t; /* complex type for fft */
+typedef float cpx_t[2]; /* complex type for fft */
 
 /* sdr initialization struct */
 typedef struct {
@@ -706,15 +705,15 @@ extern void *sdrmalloc(size_t size);
 extern void sdrfree(void *p);
 extern cpx_t *cpxmalloc(int n);
 extern void cpxfree(cpx_t *cpx);
-extern void cpxfft(fftwf_plan plan, cpx_t *cpx, int n);
-extern void cpxifft(fftwf_plan plan, cpx_t *cpx, int n);
+extern void cpxfft(cpx_t *cpx, int n);
+extern void cpxifft(cpx_t *cpx, int n);
 extern void cpxcpx(const short *II, const short *QQ, double scale, int n,
                    cpx_t *cpx);
 extern void cpxcpxf(const float *II, const float *QQ, double scale,  int n,
                     cpx_t *cpx);
-extern void cpxconv(fftwf_plan plan, fftwf_plan iplan, cpx_t *cpxa, cpx_t *cpxb,
+extern void cpxconv(cpx_t *cpxa, cpx_t *cpxb,
                     int m, int n, int flagsum, double *conv);
-extern void cpxpspec(fftwf_plan plan, cpx_t *cpx, int n, int flagsum,
+extern void cpxpspec(cpx_t *cpx, int n, int flagsum,
                      double *pspec);
 extern void dot_21(const short *a1, const short *a2, const short *b, int n, 
                    double *d1, double *d2);
