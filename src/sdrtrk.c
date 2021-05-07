@@ -19,15 +19,13 @@ extern uint64_t sdrtracking(sdrch_t *sdr, uint64_t buffloc, uint64_t cnt)
 
     sdr->flagtrk=OFF;
 
-    /* memory allocation */
-    data=(char*)sdrmalloc(sizeof(char)*(sdr->nsamp+100)*sdr->dtype);
-
     /* current buffer location */
-    mlock(hreadmtx);
     bufflocnow=sdrstat.fendbuffsize*sdrstat.buffcnt-sdr->nsamp; 
-    unmlock(hreadmtx);
 
     if (bufflocnow>buffloc) {
+        /* memory allocation */
+        data=(char*)sdrmalloc(sizeof(char)*(sdr->nsamp+100)*sdr->dtype);
+
         sdr->currnsamp=(int)((sdr->clen-sdr->trk.remcode)/
             (sdr->trk.codefreq/sdr->f_sf));
         rcvgetbuff(&sdrini,buffloc,sdr->currnsamp,sdr->ftype,sdr->dtype,data);
@@ -46,10 +44,9 @@ extern uint64_t sdrtracking(sdrch_t *sdr, uint64_t buffloc, uint64_t cnt)
         sdrnavigation(sdr,buffloc,cnt);
 
         sdr->flagtrk=ON;
-    } else {
-        sleepms(1);
+    
+        sdrfree(data);
     }
-    sdrfree(data);
     return bufflocnow;
 }
 /* cumulative sum of correlation output ----------------------------------------

@@ -676,6 +676,8 @@ extern int initsdrch(int chno, int sys, int prn, int ctype, int dtype,
     sdr->f_sf=f_sf;
     sdr->f_if=f_if;
     sdr->ti=1/f_sf;
+
+    sdr->flagacq=OFF;
     
     /* code generation */
     if (!(sdr->code=gencode(prn,ctype,&sdr->clen,&sdr->crate))) {

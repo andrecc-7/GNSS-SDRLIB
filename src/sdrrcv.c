@@ -470,7 +470,6 @@ extern void file_pushtomembuf(void)
 {
     size_t nread1=0,nread2=0;
 
-    mlock(hbuffmtx);
     if(sdrini.fp1!=NULL) {
         nread1=fread(&sdrstat.buff[(sdrstat.buffcnt%MEMBUFFLEN)*
             sdrini.dtype[0]*FILE_BUFFSIZE],1,sdrini.dtype[0]*FILE_BUFFSIZE,
@@ -481,7 +480,6 @@ extern void file_pushtomembuf(void)
             sdrini.dtype[1]*FILE_BUFFSIZE],1,sdrini.dtype[1]*FILE_BUFFSIZE,
             sdrini.fp2);
     }
-    unmlock(hbuffmtx);
 
     if ((sdrini.fp1!=NULL&&(int)nread1<sdrini.dtype[0]*FILE_BUFFSIZE)||
         (sdrini.fp2!=NULL&&(int)nread2<sdrini.dtype[1]*FILE_BUFFSIZE)) {
@@ -489,9 +487,7 @@ extern void file_pushtomembuf(void)
         SDRPRINTF("end of file!\n");
     }
 
-    mlock(hreadmtx);
     sdrstat.buffcnt++;
-    unmlock(hreadmtx);
 }
 /* get current data buffer from IF file ----------------------------------------
 * post-processing function: get current data buffer from memory buffer

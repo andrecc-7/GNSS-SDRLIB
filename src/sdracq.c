@@ -20,6 +20,9 @@ extern uint64_t sdraccuisition(sdrch_t *sdr, double *power)
     /* memory allocation */
     data=(char*)sdrmalloc(sizeof(char)*2*sdr->nsamp*sdr->dtype);
 
+    if((sdrstat.fendbuffsize*sdrstat.buffcnt) < (sdr->acq.intg+1)*sdr->nsamp)
+        return 0;
+
     /* current buffer location */
     mlock(hreadmtx);
     buffloc=(sdrstat.fendbuffsize*sdrstat.buffcnt)-(sdr->acq.intg+1)*sdr->nsamp;
@@ -55,7 +58,7 @@ extern uint64_t sdraccuisition(sdrch_t *sdr, double *power)
         sdr->trk.codefreq=sdr->crate;
     }
     else {
-        sleepms(ACQSLEEP);
+        //sleepms(ACQSLEEP);
     }
     sdrfree(data);
     return buffloc;

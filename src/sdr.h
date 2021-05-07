@@ -430,6 +430,7 @@ typedef struct {
     double carrErr;      /* carrier tracking error */
     double freqErr;      /* frequencyr error in FLL */
     uint64_t buffloc;    /* current buffer location */
+    uint64_t bufflocnow; /* current buffer location */
     double tow[OBSINTERPN]; /* time of week (s) */
     uint64_t codei[OBSINTERPN]; /* code phase (sample) */
     uint64_t codeisum[OBSINTERPN]; /* code phase for SNR computation (sample) */

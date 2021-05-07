@@ -16,7 +16,7 @@ BLADERF=../../src/rcv/bladerf
 
 INCLUDE=-I$(SRC) -I$(RTKLIB) -I$(FEC) -I$(STEREO) -I$(RTLSDR) -I$(BLADERF)
 
-CC=gcc
+CC=gcc -no-pie
 OPTIONS=-DSSE2_ENABLE -DFFTMTX -DSTEREO -DSTEREOV26
 
 LIBS=$(STEREO)/linux/libnslstereo.a $(FEC)/linux/libfec.a

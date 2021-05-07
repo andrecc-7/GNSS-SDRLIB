@@ -87,7 +87,7 @@ int main(int argc, char **argv)
     if (readinifile(&sdrini)<0) {
         return -1; 
     }
-    cratethread(hkeythread,keythread,NULL);
+    //cratethread(hkeythread,keythread,NULL);
 
     startsdr();
 
@@ -107,6 +107,8 @@ extern void startsdr(void *arg) /* call as thread */
 extern void startsdr(void) /* call as function */
 #endif
 {
+    //sdrini.nch = 1;
+
     int i;
     SDRPRINTF("GNSS-SDRLIB start!\n");
 
@@ -139,55 +141,25 @@ extern void startsdr(void) /* call as function */
     /* mutexes and events */
     openhandles();
 
-    /* create threads */
-    cratethread(hsyncthread,syncthread,NULL); /* synchronization thread */
-
-    /* sdr channel thread */
-    for (i=0;i<sdrini.nch;i++) {
-        /* GPS/QZS/GLO/GAL/CMP L1 */
-        if (sdrch[i].ctype==CTYPE_L1CA  || sdrch[i].ctype==CTYPE_G1  ||
-            sdrch[i].ctype==CTYPE_E1B   || sdrch[i].ctype==CTYPE_B1I ||
-            sdrch[i].ctype==CTYPE_L1SBAS|| sdrch[i].ctype==CTYPE_L1SAIF)
-            cratethread(sdrch[i].hsdr,sdrthread,&sdrch[i]);
-        /* QZSS LEX */
-        if (sdrch[i].sys==SYS_QZS&&sdrch[i].ctype==CTYPE_LEXS) {
-            sdrini.nchL6++;
-            cratethread(sdrch[i].hsdr,lexthread,&sdrch[i]);
-
-            /* create QZSS L1CA channel */
-            initsdrch(sdrini.nch+1,SYS_QZS,193,CTYPE_L1CA,DTYPEI,FTYPE1,
-               sdrini.f_cf[0],sdrini.f_sf[0],sdrini.f_if[0],&sdrch[sdrini.nch]);
-            cratethread(sdrch[sdrini.nch].hsdr,sdrthread,&sdrch[sdrini.nch]);
-        }
-    }
-#ifndef GUI
-    /* sdr spectrum analyzer */
-    if (sdrini.pltspec) {
-        sdrspec.dtype=sdrini.dtype[sdrini.pltspec-1];
-        sdrspec.ftype=sdrini.ftype[sdrini.pltspec-1];
-        sdrspec.nsamp=(int)(sdrini.f_sf[sdrini.pltspec-1]/1000); /* 1ms */
-        sdrspec.f_sf=sdrini.f_sf[sdrini.pltspec-1];
-        cratethread(hspecthread,specthread,&sdrspec);
-    }
-#endif
-
     /* start grabber */
     if (rcvgrabstart(&sdrini)<0) {
         quitsdr(&sdrini,4);
         return;
     }
 
-    /* data grabber loop */
-    while (!sdrstat.stopflag) {
-        if (rcvgrabdata(&sdrini)<0) {
-            sdrstat.stopflag=ON;
-            break;
-        }
-    }
+    //cratethread(sdrch[0].hsdr,sdrthread,&sdrch[0]);
+
+    sdrthread(NULL);
+
+    //while(!sdrstat.stopflag) {
+    //    if(rcvgrabdata(&sdrini) < 0)
+    //        sdrstat.stopflag = ON;
+    //}
+
     /* wait thereds */
-    waitthread(hsyncthread);
-    for (i=0;i<sdrini.nch;i++) 
-        waitthread(sdrch[i].hsdr);
+    //waitthread(hsyncthread);
+    //for (i=0;i<sdrini.nch;i++) 
+    //    waitthread(sdrch[i].hsdr);
 
     /* sdr termination */
     quitsdr(&sdrini,0);
@@ -203,10 +175,7 @@ extern void startsdr(void) /* call as function */
 extern void quitsdr(sdrini_t *ini, int stop)
 {
     int i;
-#ifdef GUI
-    maindlg^form=static_cast<maindlg^>(hform.Target);
-    form->guistop();
-#endif
+
     if (stop==1) return;
 
     /* sdr termination */
@@ -228,122 +197,130 @@ extern void quitsdr(sdrini_t *ini, int stop)
 * note : This thread handles the acquisition and tracking of one of the signals. 
 *        The thread is created at startsdr function.
 *-----------------------------------------------------------------------------*/
-#ifdef WIN32
-extern void sdrthread(void *arg)
-#else
 extern void *sdrthread(void *arg)
-#endif
 {
-    sdrch_t *sdr=(sdrch_t*)arg;
-    sdrplt_t pltacq={0},plttrk={0};
-    uint64_t buffloc=0,bufflocnow=0,cnt=0,loopcnt=0;
+    sdrch_t *sdr;
+    uint64_t *cnt = malloc(sizeof(uint64_t)*sdrini.nch), *loopcnt = malloc(sizeof(uint64_t)*sdrini.nch);
     double *acqpower=NULL;
-    FILE* fp=NULL;
+    FILE** fp = (FILE**) malloc(sizeof(FILE*)*sdrini.nch);
     char fname[100];
     
+    int k;
+    int ontrk = 0;
+    int request = ontrk;
+
     /* create tracking log file */
-    if (sdrini.log) {
-        sprintf(fname,"log%s.csv",sdr->satstr);
-        if((fp=createlog(fname,&sdr->trk))==NULL) {
-            SDRPRINTF("error: invailed log file: %s\n",fname);
-            return THRETVAL;
-        }
-    }
+    for(k = 0; k < sdrini.nch; k++)
+    {
+        cnt[k] = 0; loopcnt[k] = 0;
+        sdr = &sdrch[k];
 
-    /* plot setting */
-    if (initpltstruct(&pltacq,&plttrk,sdr)<0) {
-        sdrstat.stopflag=ON;
-    }
-    sleepms(sdr->no*500);
-    SDRPRINTF("**** %s sdr thread %d start! ****\n",sdr->satstr,sdr->no);
-
-    while (!sdrstat.stopflag) {
-        /* acquisition */
-        if (!sdr->flagacq) {
-            /* memory allocation */
-            if (acqpower!=NULL) free(acqpower);
-            acqpower=(double*)calloc(sizeof(double),sdr->nsamp*sdr->acq.nfreq);
-
-            /* fft correlation */
-            buffloc=sdraccuisition(sdr,acqpower);
-
-            /* plot aquisition result */
-            if (sdr->flagacq&&sdrini.pltacq) {
-                pltacq.z=acqpower;
-                plot(&pltacq); 
+        if (sdrini.log) {
+            sprintf(fname,"log%s.csv",sdr->satstr);
+            if((fp[k]=createlog(fname,&sdr->trk))==NULL) {
+                SDRPRINTF("error: invailed log file: %s\n",fname);
+                return THRETVAL;
             }
         }
-        /* tracking */
-        if (sdr->flagacq) {
-            bufflocnow=sdrtracking(sdr,buffloc,cnt);
-            if (sdr->flagtrk) {
+    }
+
+    //sleepms(sdr->no*500);
+    //SDRPRINTF("**** %s sdr thread %d start! ****\n",sdr->satstr,sdr->no);
+
+    while (!sdrstat.stopflag) {       
+
+        if(request == ontrk)
+            file_pushtomembuf();
+
+        request = 0;
+        ontrk = 0;
+
+        for(k = 0, sdr = &sdrch[0], syncthread(NULL);
+                k < sdrini.nch; sdr = &sdrch[++k])
+        {
+            /* acquisition */
+            
+            if (!sdr->flagacq) {               
+                /* memory allocation */
+                if (acqpower!=NULL) free(acqpower);
+                acqpower = (double*) calloc(sizeof(double),sdr->nsamp*sdr->acq.nfreq);
+
+                /* fft correlation */
+                sdr->trk.buffloc=sdraccuisition(sdr,acqpower);
+            }
+
+            /* tracking */
+
+            if (sdr->flagacq) {
+                ontrk ++;
+
+                sdr->trk.bufflocnow = sdrtracking(sdr,sdr->trk.buffloc,cnt[k]);
                 
-                /* correlation output accumulation */
-                cumsumcorr(&sdr->trk,sdr->nav.ocode[sdr->nav.ocodei]);
+                if(sdr->trk.bufflocnow<=sdr->trk.buffloc)
+                    request ++;
 
-                sdr->trk.flagloopfilter=0;
-                if (!sdr->nav.flagsync) {
-                    pll(sdr,&sdr->trk.prm1,sdr->ctime); /* PLL */
-                    dll(sdr,&sdr->trk.prm1,sdr->ctime); /* DLL */
-                    sdr->trk.flagloopfilter=1;
-                }
-                else if (sdr->nav.swloop) {
-                    pll(sdr,&sdr->trk.prm2,(double)sdr->trk.loopms/1000);
-                    dll(sdr,&sdr->trk.prm2,(double)sdr->trk.loopms/1000);
-                    sdr->trk.flagloopfilter=2;
+                if (sdr->flagtrk) {
 
-                    mlock(hobsmtx);
+                    /* correlation output accumulation */
+                    cumsumcorr(&sdr->trk,sdr->nav.ocode[sdr->nav.ocodei]);
 
-                    /* calculate observation data */
-                    if (loopcnt%(SNSMOOTHMS/sdr->trk.loopms)==0)
-                        setobsdata(sdr,buffloc,cnt,&sdr->trk,1);
-                    else
-                        setobsdata(sdr,buffloc,cnt,&sdr->trk,0);
-
-                    unmlock(hobsmtx);
-
-                    /* plot correator output */
-                    if (loopcnt%((int)(plttrk.pltms/sdr->trk.loopms))==0&&
-                        sdrini.plttrk&&loopcnt>0) {
-                        plttrk.x=sdr->trk.corrx;
-                        memcpy(plttrk.y,sdr->trk.sumI,
-                            sizeof(double)*(sdr->trk.corrn*2+1));
-                        plotthread(&plttrk);
+                    sdr->trk.flagloopfilter=0;
+                    if (!sdr->nav.flagsync) {
+                        pll(sdr,&sdr->trk.prm1,sdr->ctime); /* PLL */
+                        dll(sdr,&sdr->trk.prm1,sdr->ctime); /* DLL */
+                        sdr->trk.flagloopfilter=1;
                     }
-                    
-                    /* LEX thread */
-                    if (sdrini.nchL6!=0&&sdr->no==sdrini.nch+1&&loopcnt>250) 
-                        setevent(hlexeve);
+                    else if (sdr->nav.swloop) {
+                        pll(sdr,&sdr->trk.prm2,(double)sdr->trk.loopms/1000);
+                        dll(sdr,&sdr->trk.prm2,(double)sdr->trk.loopms/1000);
+                        sdr->trk.flagloopfilter=2;
 
-                    loopcnt++;
+                        mlock(hobsmtx);
+
+                        /* calculate observation data */
+                        if (loopcnt[k]%(SNSMOOTHMS/sdr->trk.loopms)==0)
+                            setobsdata(sdr,sdr->trk.buffloc,cnt[k],&sdr->trk,1);
+                        else
+                            setobsdata(sdr,sdr->trk.buffloc,cnt[k],&sdr->trk,0);
+
+                        unmlock(hobsmtx);
+
+                        /* LEX thread */
+                        if (sdrini.nchL6!=0&&sdr->no==sdrini.nch+1&&loopcnt[k]>250) 
+                            setevent(hlexeve);
+
+                        loopcnt[k]++;
+                    }
+
+                    if (cnt[k]%(1000*10)==0)
+                        SDRPRINTF("process %d sec...\n",(int)cnt[k]/(1000));
+
+                    /* write tracking log */
+                    if (sdrini.log) writelog(fp[k],&sdr->trk,&sdr->nav);
+
+                    if (sdr->trk.flagloopfilter) clearcumsumcorr(&sdr->trk);
+                    cnt[k]++;
+                    sdr->trk.buffloc+=sdr->currnsamp;
                 }
-
-                if (sdr->no==1&&cnt%(1000*10)==0)
-                    SDRPRINTF("process %d sec...\n",(int)cnt/(1000));
-
-                /* write tracking log */
-                if (sdrini.log) writelog(fp,&sdr->trk,&sdr->nav);
-
-                if (sdr->trk.flagloopfilter) clearcumsumcorr(&sdr->trk);
-                cnt++;
-                buffloc+=sdr->currnsamp;
             }
         }
-        sdr->trk.buffloc=buffloc;
     }
     
-    if (sdrini.nchL6!=0&&sdr->no==sdrini.nch+1) 
-        setevent(hlexeve);
+    //if (sdrini.nchL6!=0&&sdr->no==sdrini.nch+1) 
+    //    setevent(hlexeve);
     
     /* plot termination */
-    quitpltstruct(&pltacq,&plttrk);
+    // quitpltstruct(&pltacq,&plttrk);
 
     /* cloase tracking log file */
-    if (sdrini.log) closelog(fp);
+    if (sdrini.log) {
+        for(k = 0; k < sdrini.nch; k ++)
+            closelog(fp[k]);
+    }
 
     if (sdr->flagacq) {
         SDRPRINTF("SDR channel %s thread finished! Delay=%d [ms]\n",
-            sdr->satstr,(int)(bufflocnow-buffloc)/sdr->nsamp);
+            sdr->satstr,(int)(sdr->trk.bufflocnow-sdr->trk.buffloc)/sdr->nsamp);
     } else {
         SDRPRINTF("SDR channel %s thread finished!\n",sdr->satstr);
     }
