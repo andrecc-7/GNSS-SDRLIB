@@ -14,34 +14,21 @@
 #include <stdint.h>
 #include <string.h>
 #include <signal.h>
-#include <time.h>
 #include <stdarg.h>
 #include <ctype.h>
 
-#include <pthread.h>
 #include <stdbool.h>
 #include <inttypes.h>
 
-/* SIMD (SSE2_ENABLE) */
-#if defined(SSE2_ENABLE)
-#include <emmintrin.h>
-#include <tmmintrin.h>
-#endif
-
-/* SIMD (AVX_ENABLE/AVX2_ENABLE) */
-#if defined(AVX_ENABLE)||defined(AVX2_ENABLE)
-#include <immintrin.h>
-#endif
-
 #include "fec.h"
 #include "rtklib.h"
-#include "libusb-1.0/libusb.h"
+#include "kiss_fft.h"
+
+#include "fpga/fpga.h"
 
 #define SDRPRINTF printf
-
-#ifdef __cplusplus
-extern "C" {
-#endif
+#define OBSPRINTF printf
+#define NAVPRINTF printf
 
 /* constants -----------------------------------------------------------------*/
 #define ROUND(x)      ((int)floor((x)+0.5)) /* round function */
@@ -214,37 +201,6 @@ extern "C" {
 /* SBAS/QZSS L1-SAIF setting */
 #define LENSBASMSG    32               /* SBAS message length 150/8 (byte) */
 #define LENSBASNOV    80               /* message length in NovAtel format */
-
-/* thread functions */
-#ifdef WIN32
-#define mlock_t       HANDLE
-#define initmlock(f)  (f=CreateMutex(NULL,FALSE,NULL))
-#define mlock(f)      WaitForSingleObject(f,INFINITE)
-#define unmlock(f)    ReleaseMutex(f)
-#define delmlock(f)   CloseHandle(f)
-#define event_t       HANDLE
-#define initevent(f)  (f=CreateEvent(NULL,FALSE,FALSE,NULL))
-#define setevent(f)   SetEvent(f)
-#define waitevent(f,m) WaitForSingleObject(f,INFINITE)
-#define delevent(f)   CloseHandle(f)
-#define waitthread(f) WaitForSingleObject(f,INFINITE)
-#define cratethread(f,func,arg) (f=(thread_t)_beginthread(func,0,arg))
-#define THRETVAL      
-#else
-#define mlock_t       pthread_mutex_t
-#define initmlock(f)  pthread_mutex_init(&f,NULL)
-#define mlock(f)      pthread_mutex_lock(&f)
-#define unmlock(f)    pthread_mutex_unlock(&f)
-#define delmlock(f)   pthread_mutex_destroy(&f)
-#define event_t       pthread_cond_t
-#define initevent(f)  pthread_cond_init(&f,NULL)
-#define setevent(f)   pthread_cond_signal(&f)
-#define waitevent(f,m) pthread_cond_wait(&f,&m)
-#define delevent(f)   pthread_cond_destroy(&f)
-#define waitthread(f) pthread_join(f,NULL)
-#define cratethread(f,func,arg) pthread_create(&f,NULL,func,arg)
-#define THRETVAL      NULL
-#endif
 
 /* type definition -----------------------------------------------------------*/
 typedef float cpx_t[2]; /* complex type for fft */
@@ -464,7 +420,6 @@ typedef struct {
 
 /* sdr channel struct */
 typedef struct {
-    thread_t hsdr;       /* thread handle */
     int no;              /* channel number */
     int sat;             /* satellite number */
     int sys;             /* satellite system */
@@ -519,13 +474,8 @@ typedef struct {
 
 /* sdr socket struct */
 typedef struct {
-    thread_t hsoc;       /* thread handle */
     int port;            /* port number */
-#ifdef WIN32
-    SOCKET s_soc,c_soc;  /* server/client socket */
-#else
     int s_soc,c_soc;     /* server/client socket */
-#endif
     int flag;            /* connection flag */
 } sdrsoc_t;
 
@@ -553,18 +503,6 @@ typedef struct {
 } sdrspec_t;
 
 /* global variables ----------------------------------------------------------*/
-extern thread_t hmainthread;  /* main thread handle */
-extern thread_t hsyncthread;  /* synchronization thread handle */
-extern thread_t hspecthread;  /* spectrum analyzer thread handle */
-extern thread_t hkeythread;   /* keyboard thread handle */
-extern mlock_t hbuffmtx;      /* buffer access mutex */
-extern mlock_t hreadmtx;      /* buffloc access mutex */
-extern mlock_t hfftmtx;       /* fft function mutex */
-extern mlock_t hpltmtx;       /* plot function mutex */
-extern mlock_t hobsmtx;       /* observation data access mutex */
-extern mlock_t hlexmtx;       /* QZSS LEX mutex */
-extern event_t hlexeve;       /* QZSS LEX event */
-
 extern sdrini_t sdrini;       /* sdr initialization struct */
 extern sdrstat_t sdrstat;     /* sdr state struct */
 extern sdrch_t sdrch[MAXSAT]; /* sdr channel structs */
@@ -572,26 +510,12 @@ extern sdrspec_t sdrspec;     /* sdr spectrum analyzer structs */
 extern sdrout_t sdrout;       /* sdr output structs */
 
 /* sdrmain.c -----------------------------------------------------------------*/
-#ifdef GUI
-extern GCHandle hform;
-extern void initsdrgui(maindlg^ form, sdrini_t* sdrinigui);
-extern void startsdr(void *arg);
-#else
 extern void startsdr(void);
-#endif
 extern void quitsdr(sdrini_t *ini, int stop);
-#ifdef WIN32
-extern void sdrthread(void *arg);
-#else
-extern void *sdrthread(void *arg);
-#endif
+extern void *sdrprocessing(void *arg);
 
 /* sdrsync.c -----------------------------------------------------------------*/
-#ifdef WIN32
-extern void syncthread(void * arg);
-#else
 extern void *syncthread(void * arg);
-#endif
 
 /* sdracq.c ------------------------------------------------------------------*/
 extern uint64_t sdraccuisition(sdrch_t *sdr, double *power);
@@ -628,7 +552,7 @@ extern int getfullpath(char *relpath, char *abspath);
 extern unsigned long tickgetus(void);
 extern void sleepus(int usec);
 extern void settimeout(struct timespec *timeout, int waitms);
-extern double log2(double n);
+// extern double log2(double n);
 extern int calcfftnum(double x, int next);
 extern void *sdrmalloc(size_t size);
 extern void sdrfree(void *p);
@@ -651,7 +575,7 @@ extern void dot_22(const short *a1, const short *a2, const short *b1,
 extern void dot_23(const short *a1, const short *a2, const short *b1, 
                    const short *b2, const short *b3, int n, double *d1, 
                    double *d2);
-extern double mixcarr(const char *data, int dtype, double ti, int n, 
+extern double mixcarr(const char *data, int dtype, double ti, int n,
                       double freq, double phi0, short *II, short *QQ);
 extern void mulvcs(const char *data1, const short *data2, int n, short *out);
 extern void sumvf(const float *data1, const float *data2, int n, float *out);
@@ -664,15 +588,15 @@ extern double interp1(double *x, double *y, int n, double t);
 extern void uint64todouble(uint64_t *data, uint64_t base, int n, double *out);
 extern void ind2sub(int ind, int nx, int ny, int *subx, int *suby);
 extern void shiftdata(void *dst, void *src, size_t size, int n);
-extern double rescode(const short *code, int len, double coff, int smax, 
+extern double rescode(const short *code, int len, double coff, int smax,
                       double ci, int n, short *rcode);
-extern void pcorrelator(const char *data, int dtype, double ti, int n, 
+extern void pcorrelator(const char *data, int dtype, double ti, int n,
                         double *freq, int nfreq, double crate, int m, 
                         cpx_t* codex, double *P);
-extern void correlator(const char *data, int dtype, double ti, int n, 
+extern void correlator(const char *data, int dtype, double ti, int n,
                        double freq, double phi0, double crate, double coff, 
                        int* s, int ns, double *II, double *QQ, double *remc, 
-                       double *remp, short* codein, int coden);
+                       double *remp, short* codein, int coden, int PL);
 
 /* sdrcode.c -----------------------------------------------------------------*/
 extern short *gencode(int prn, int ctype, int *len, double *crate);
@@ -725,10 +649,10 @@ extern int paritycheck_l1ca(int *bits);
 /* sdrout.c ------------------------------------------------------------------*/
 extern void createrinexopt(rnxopt_t *opt);
 extern void sdrobs2obsd(sdrobs_t *sdrobs, int ns, obsd_t *out);
-extern int createrinexobs(char *file, rnxopt_t *opt);
-extern int writerinexobs(char *file, rnxopt_t *opt, obsd_t *obsd, int ns);
-extern int createrinexnav(char *file, rnxopt_t *opt);
-extern int writerinexnav(char *file, rnxopt_t *opt, sdreph_t *sdreph);
+extern int createrinexobs(rnxopt_t *opt);
+extern int writerinexobs(rnxopt_t *opt, obsd_t *obsd, int ns);
+extern int createrinexnav(rnxopt_t *opt);
+extern int writerinexnav(rnxopt_t *opt, sdreph_t *sdreph);
 extern void tcpsvrstart(sdrsoc_t *soc);
 extern void tcpsvrclose(sdrsoc_t *soc);
 extern void sendrtcmnav(sdreph_t *eph, sdrsoc_t *soc);

@@ -49,6 +49,7 @@ int init_dma(XAxiDma *dma, u32 Device)
 }
 
 #define O_TYP_B 8
+
 void transaction_tracking(int n, char* data, int dtype_, double phase_, double phase_step_,
 		short int* code, int clen, double coff_, double crate_, double csperiod_, int smax, int ns,
 		double* CI, double* CQ)
@@ -65,27 +66,41 @@ Xil_DCacheDisable(); // --------------------------------------------------
 
     // ** OUTPUT **
 
-	xil_printf("Requesting %d results from each correlator\n", 2*ns+1);
+	//xil_printf("Requesting %d results from each correlator\n", 2*ns+1);
 
     TRY(
-    	XAxiDma_SimpleTransfer(&dma0, CI, (2*ns+1)*O_TYP_B, XAXIDMA_DEVICE_TO_DMA),
+    	XAxiDma_SimpleTransfer(&dma0, CI, O_TYP_B, XAXIDMA_DEVICE_TO_DMA),
 		"DMA 0: RX: error: %d\n")
 	TRY(
-		XAxiDma_SimpleTransfer(&dma1, CQ, (2*ns+1)*O_TYP_B, XAXIDMA_DEVICE_TO_DMA),
+		XAxiDma_SimpleTransfer(&dma1, CQ, O_TYP_B, XAXIDMA_DEVICE_TO_DMA),
 		"DMA 1: RX: error: %d\n")
 
 	// ** INPUT **
 
-	xil_printf("TRANSACTION: RESAMPLE CODE\n");
+	//xil_printf("TRANSACTION: RESAMPLE CODE\n");
 	transaction_rescode(&dma1, code, clen, n, coff_ - csperiod_*smax, csperiod_, smax, ns);
-	xil_printf("TRANSACTION: MIX CARRIER\n");
+
+	//xil_printf("TRANSACTION: MIX CARRIER\n");
     transaction_mixcarr(&dma0, data, n, dtype_, phase_, phase_step_, ns);
 
 	// ** RESULTS **
 
-	xil_printf("Wait for resuslts...\n");
+	//xil_printf("Wait for resuslts...\n");
+
 	while(XAxiDma_Busy(&dma0, XAXIDMA_DEVICE_TO_DMA) == TRUE);
 	while(XAxiDma_Busy(&dma1, XAXIDMA_DEVICE_TO_DMA) == TRUE);
+
+	for(int i = 1; i < CODE_COPIES; i ++) {
+	    TRY(
+	    	XAxiDma_SimpleTransfer(&dma0, &(CI[i]), O_TYP_B, XAXIDMA_DEVICE_TO_DMA),
+			"DMA 0: RX: error: %d\n")
+		TRY(
+			XAxiDma_SimpleTransfer(&dma1, &(CQ[i]), O_TYP_B, XAXIDMA_DEVICE_TO_DMA),
+			"DMA 1: RX: error: %d\n")
+
+		while(XAxiDma_Busy(&dma0, XAXIDMA_DEVICE_TO_DMA) == TRUE);
+		while(XAxiDma_Busy(&dma1, XAXIDMA_DEVICE_TO_DMA) == TRUE);
+	}
 
 Xil_DCacheEnable(); // --------------------------------------------------
 
@@ -97,6 +112,8 @@ Xil_DCacheEnable(); // --------------------------------------------------
 #define RS_O_BUS_B 8
 #define RS_I_TYP_B 2
 #define RS_O_TYP_B 2
+#define RS_I_BUS_e (RS_I_BUS_B/RS_I_TYP_B)
+#define RS_O_BUS_e (RS_O_BUS_B/RS_O_TYP_B)
 
 void transaction_rescode(XAxiDma *dma, short int* code, int clen, int n, double coff_, double csperiod_, int smax, int ns)
 {
@@ -104,7 +121,8 @@ void transaction_rescode(XAxiDma *dma, short int* code, int clen, int n, double 
 
 	// ** ARGUMENTS **
 
-	int last = RS_O_TYP_B*(n/RS_O_BUS_B) - 1;
+	int last = (int) (((float) n + RS_O_BUS_e - 1)/RS_O_BUS_e) - 1;
+
 	long long int coff = (long long int) (coff_ * pow(2,48)); // Q16.48
 	long long int csperiod = (long long int) (csperiod_ * pow(2,48)); // Q16.48
 	short int codes = CODE_COPIES;
@@ -116,8 +134,9 @@ void transaction_rescode(XAxiDma *dma, short int* code, int clen, int n, double 
 	aux[4] = ((int*) &csperiod)[1];
 	((char*) aux)[18 /*4*4+2*/] = (char) smax; // code displacement
 	((char*) aux)[19 /*4*4+3*/] = (char) codes; // number of code copies
+	aux[5] = clen;
 
-	size = 5*RS_I_BUS_B;
+	size = 6*RS_I_BUS_B;
 
 	TRY(
 		XAxiDma_SimpleTransfer(dma, aux, size, XAXIDMA_DMA_TO_DEVICE),
@@ -127,7 +146,7 @@ void transaction_rescode(XAxiDma *dma, short int* code, int clen, int n, double 
 
 	// ** INPUT **
 
-	size = RS_I_TYP_B*clen;
+	size = clen*RS_I_TYP_B;
 
 	TRY(
 		XAxiDma_SimpleTransfer(dma, code, size, XAXIDMA_DMA_TO_DEVICE),
@@ -142,6 +161,7 @@ void transaction_rescode(XAxiDma *dma, short int* code, int clen, int n, double 
 #define MC_O_BUS_B 8
 #define MC_I_TYP_B 1
 #define MC_O_TYP_B 2
+#define MC_I_BUS_e (MC_I_BUS_B/MC_I_TYP_B)
 
 void transaction_mixcarr(XAxiDma *dma, char* data, int n, int dtype_, double phase_, double phase_step_, int ns)
 {
@@ -149,8 +169,9 @@ void transaction_mixcarr(XAxiDma *dma, char* data, int n, int dtype_, double pha
 
 	// ** ARGUMENTS **
 
-	int last = MC_I_TYP_B*(n/MC_I_BUS_B) - 1;
-    int data_type = dtype_;
+	int last = (int) (((float) n + MC_I_BUS_e - 1)/MC_I_BUS_e) - 1;
+
+	int data_type = dtype_;
     long long int phase = (long long int) (phase_ * pow(2,44)); // Q20.44 (64b);
     long long int phase_step = (long long int) (phase_step_ * pow(2,44)); // Q20.44 (64b)
 
@@ -172,7 +193,7 @@ void transaction_mixcarr(XAxiDma *dma, char* data, int n, int dtype_, double pha
 
 	// ** INPUT **
 
-	size = MC_I_TYP_B*n;
+	size = (last + 1)*MC_I_BUS_B;
 
 	for(i = 0; i < 2*ns+1; i++) {
 		TRY(

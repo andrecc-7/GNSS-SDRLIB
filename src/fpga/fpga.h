@@ -6,8 +6,13 @@
 #include "xil_printf.h"
 #include "xtime_l.h"
 
-#define PL // COMMENT TO USE 'PS'
-//#define COMPARE
+/*
+ * short int : 2 bytes
+ * int : 4 bytes
+ * long int : 4 bytes
+ * long long int : 8 bytes
+ * */
+
 //#define CHECK_STEPS
 
 /**********************************/
@@ -15,7 +20,7 @@
 /**********************************/
 
 /* SIZES */
-#define NSAMPLES	256//524288//131072//10000000//16368 	/* SAMPLES IN 1 CODE PERIOD */
+#define NSAMPLES	16368//524288//131072//10000000//16368 	/* SAMPLES IN 1 CODE PERIOD */
 #define NCHIPS		1023	                                /* CHIPS   "              " */
 #define SAMP_CHIP 	16
 #define CORRN 1
@@ -45,7 +50,7 @@
 
 #define CC 8
 
-#define DATA   		BASE_ADDR_1 //GPSGIOVEA02 //BASE_ADDR_1
+#define DATA   		BASE_ADDR_1//GPSGIOVEA02 //BASE_ADDR_1
 #define CODE   		BASE_ADDR_2
 
 #define DATAI  		BASE_ADDR_3

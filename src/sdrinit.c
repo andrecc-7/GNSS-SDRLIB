@@ -5,22 +5,34 @@
 *-----------------------------------------------------------------------------*/
 #include "sdr.h"
 
+/* sdr structs */
+sdrini_t sdrini={0};
+sdrstat_t sdrstat={0};
+sdrch_t sdrch[MAXSAT]={{0}};
+sdrspec_t sdrspec={0};
+sdrout_t sdrout={0};
+
 /* read ini file -------------------------------------------------------------*/
-#ifndef WIN32
 static int GetFileAttributes(const char *file)
 {
+#if defined(VITIS)
+#else
     FILE *fp;
     if (!(fp=fopen(file,"r"))) return -1;
     fclose(fp);
+#endif
     return 0;
 }
+
 static void GetPrivateProfileString(const char *sec, const char *key,
     const char *def, char *str, int len, const char *file)
 {
     FILE *fp;
     char buff[1024],*p,*q;
     int enter=0;
+#if defined(VITIS)
 
+#else
     strncpy(str,def,len-1); str[len-1]='\0';
 
     if (!(fp=fopen(file,"r"))) {
@@ -43,8 +55,8 @@ static void GetPrivateProfileString(const char *sec, const char *key,
         }
     }
     fclose(fp);
+#endif
 }
-#endif /* WIN32 */
 
 /* functions used in read ini file ---------------------------------------------
 * note : these functions are only used in CLI application
@@ -105,113 +117,73 @@ void readinistr(char *file, char *sec, char *key, char *out)
 *-----------------------------------------------------------------------------*/
 extern int readinifile(sdrini_t *ini)
 {
-    int i,ret;
-    char inifile[]="./gnss-sdrcli.ini";
-    char fendfile[256],str[256];
+    int i;
 
-    /* check ini file */
-    if ((ret=GetFileAttributes(inifile))<0){
-        SDRPRINTF("error: gnss-sdrcli.ini doesn't exist\n");
-        return -1;
-    }
-    /* receiver setting */
-    readinistr(inifile,"RCV","FENDCONF",fendfile);
-
-    /* check front-end configuration  file */
-    if ((ret=GetFileAttributes(fendfile))<0){
-        SDRPRINTF("error: %s doesn't exist\n",fendfile);
-        return -1;
-    }
-    readinistr(fendfile,"FEND","TYPE",str);
-    if (strcmp(str,"STEREO")==0)     ini->fend=FEND_STEREO;
-    else if (strcmp(str,"GN3SV2")==0)     ini->fend=FEND_GN3SV2;
-    else if (strcmp(str,"GN3SV3")==0)     ini->fend=FEND_GN3SV3;
-    else if (strcmp(str,"BLADERF")==0)     ini->fend=FEND_BLADERF;
-    else if (strcmp(str,"RTLSDR")==0)     ini->fend=FEND_RTLSDR;
-    else if (strcmp(str,"FILESTEREO")==0) ini->fend=FEND_FSTEREO;
-    else if (strcmp(str,"FILEGN3SV2")==0) ini->fend=FEND_FGN3SV2;
-    else if (strcmp(str,"FILEGN3SV3")==0) ini->fend=FEND_FGN3SV3;
-    else if (strcmp(str,"FILEBLADERF")==0) ini->fend=FEND_FBLADERF;
-    else if (strcmp(str,"FILERTLSDR")==0) ini->fend=FEND_FRTLSDR;
-    else if (strcmp(str,"FILE")==0)       ini->fend=FEND_FILE;
-    else { SDRPRINTF("error: wrong frontend type: %s\n",str); return -1; }
-    if (ini->fend==FEND_FILE    ||ini->fend==FEND_FSTEREO||
-        ini->fend==FEND_FGN3SV2 ||ini->fend==FEND_FGN3SV3||
-        ini->fend==FEND_FBLADERF||ini->fend==FEND_FRTLSDR) {
-        readinistr(fendfile,"FEND","FILE1",ini->file1);
-        if (strcmp(ini->file1,"")!=0) ini->useif1=ON;
-    }
-    if (ini->fend==FEND_FILE) {
-        readinistr(fendfile,"FEND","FILE2",ini->file2);
-        if (strcmp(ini->file2,"")!=0) ini->useif2=ON;
-    }
-    ini->f_cf[0]=readinidouble(fendfile,"FEND","CF1");
-    ini->f_sf[0]=readinidouble(fendfile,"FEND","SF1");
-    ini->f_if[0]=readinidouble(fendfile,"FEND","IF1");
-    ini->dtype[0]=readiniint(fendfile,"FEND","DTYPE1");
-    ini->f_cf[1]=readinidouble(fendfile,"FEND","CF2");
-    ini->f_sf[1]=readinidouble(fendfile,"FEND","SF2");
-    ini->f_if[1]=readinidouble(fendfile,"FEND","IF2");
-    ini->dtype[1]=readiniint(fendfile,"FEND","DTYPE2");
+    ini->fend	= FEND_FILE;
+    //strcpy(ini->file1, "../../../../data/GPS_and_GIOVE_A-NN-fs16_3676-if4_1304.bin");
+    strcpy(ini->file1, "../../../../data/gn3sv3_l1/gn3sv3_l1.bin");
+    ini->useif1	= ON;
+	// strcpy(ini->file2, "");
+	ini->useif2	= OFF;
+    ini->f_cf[0]= 1575.42e6;
+    ini->f_sf[0]= 16.3676e6;
+    ini->f_if[0]= 4.092e6;//4.1304e6;
+    ini->dtype[0]=1;
+    ini->f_cf[1]= 0.0;
+    ini->f_sf[1]= 0.0;
+    ini->f_if[1]= 0.0;
+    ini->dtype[1]=0;
 
     /* RTL-SDR only */
-    ini->rtlsdrppmerr=readiniint(fendfile,"FEND","PPMERR");
+    ini->rtlsdrppmerr=30;
 
     /* tracking parameter setting */
-    ini->trkcorrn=readiniint(fendfile,"TRACK","CORRN");
-    ini->trkcorrd=readiniint(fendfile,"TRACK","CORRD");
-    ini->trkcorrp=readiniint(fendfile,"TRACK","CORRP");
-    ini->trkdllb[0]=readinidouble(fendfile,"TRACK","DLLB1");
-    ini->trkpllb[0]=readinidouble(fendfile,"TRACK","PLLB1");
-    ini->trkfllb[0]=readinidouble(fendfile,"TRACK","FLLB1");
-    ini->trkdllb[1]=readinidouble(fendfile,"TRACK","DLLB2");
-    ini->trkpllb[1]=readinidouble(fendfile,"TRACK","PLLB2");
-    ini->trkfllb[1]=readinidouble(fendfile,"TRACK","FLLB2");
+    ini->trkcorrn=3;
+    ini->trkcorrd=3;
+    ini->trkcorrp=6;
+    ini->trkdllb[0]=5.0;
+    ini->trkpllb[0]=30.0;
+    ini->trkfllb[0]=200.0;
+    ini->trkdllb[1]=1.0;
+    ini->trkpllb[1]=10.0;
+    ini->trkfllb[1]=50.0;
     
     /* channel setting */
-    ini->nch=readiniint(inifile,"CHANNEL","NCH");
-    if (ini->nch<1) {
-        SDRPRINTF("error: wrong inifile value NCH=%d\n",ini->nch);
-        return -1;
-    }
-    if ((ret=readiniints(inifile,"CHANNEL","PRN",ini->prn,ini->nch))<0 ||
-        (ret=readiniints(inifile,"CHANNEL","SYS",ini->sys,ini->nch))<0 ||
-        (ret=readiniints(inifile,"CHANNEL","CTYPE",ini->ctype,ini->nch))<0 ||
-        (ret=readiniints(inifile,"CHANNEL","FTYPE",ini->ftype,ini->nch))<0) {
-            SDRPRINTF("error: wrong inifile value NCH=%d\n",ini->nch);
-            return -1;
-    }
+    ini->nch=1;
 
-    /* plot setting */
-    ini->pltacq=readiniint(inifile,"PLOT","ACQ");
-    ini->plttrk=readiniint(inifile,"PLOT","TRK");
+	ini->prn[0]   = 1;//3;
+	//ini->prn[1]   = 4;//15;
+	//ini->prn[2]   = 6;//16;
+	//ini->prn[3]   = 20;//18;
+    for(int i = 0; i < 1; i++) {
+		ini->sys[i]   = 1;
+		ini->ctype[i] = 1;
+		ini->ftype[i] = 1;
+	}
 
     /* output setting */
-    ini->outms   =readiniint(inifile,"OUTPUT","OUTMS");
-    ini->rinex   =readiniint(inifile,"OUTPUT","RINEX");
-    ini->rtcm    =readiniint(inifile,"OUTPUT","RTCM");
-    ini->lex     =readiniint(inifile,"OUTPUT","LEX");
-    ini->sbas    =readiniint(inifile,"OUTPUT","SBAS");
-    ini->log     =readiniint(inifile,"OUTPUT","LOG");
-    readinistr(inifile,"OUTPUT","RINEXPATH",ini->rinexpath);
-    ini->rtcmport=readiniint(inifile,"OUTPUT","RTCMPORT");
-    ini->lexport =readiniint(inifile,"OUTPUT","LEXPORT");
-    ini->sbasport=readiniint(inifile,"OUTPUT","SBASPORT");
-
-    /* spectrum setting */
-    ini->pltspec=readiniint(inifile,"SPECTRUM","SPEC");
+    ini->outms   =100;
+    ini->rinex   =1;
+    ini->rtcm    =0;
+    ini->lex     =0;
+    ini->sbas    =0;
+    ini->log     =0;
+    strcpy(ini->rinexpath, "./");
+    ini->rtcmport=9999;
+    ini->lexport =9998;
+    ini->sbasport=9997;
 
     /* sdr channel setting */
-    for (i=0;i<sdrini.nch;i++) {
-        if (sdrini.ctype[i]==CTYPE_L1CA ||
-            sdrini.ctype[i]==CTYPE_G1 ||
-            sdrini.ctype[i]==CTYPE_E1B ||
-            sdrini.ctype[i]==CTYPE_B1I
+    for (i=0;i<ini->nch;i++) {
+        if (ini->ctype[i]==CTYPE_L1CA ||
+            ini->ctype[i]==CTYPE_G1 ||
+            ini->ctype[i]==CTYPE_E1B ||
+            ini->ctype[i]==CTYPE_B1I
             ) {
-            sdrini.nchL1++;
+            ini->nchL1++;
         }
-        if (sdrini.ctype[i]==CTYPE_LEXS) {
-            sdrini.nchL6++;
+        if (ini->ctype[i]==CTYPE_LEXS) {
+            ini->nchL6++;
         }
     }
     return 0;
@@ -243,14 +215,6 @@ extern int chk_initvalue(sdrini_t *ini)
         }
     }
 
-    /* checking port number input */
-    if ((ini->rtcmport<0||ini->rtcmport>32767) ||
-        (ini->lexport<0||ini->lexport>32767)) {
-            SDRPRINTF("error: wrong rtcm port rtcm:%d lex:%d\n",
-                ini->rtcmport,ini->lexport);
-            return -1;
-    }
-
     /* checking filepath */
     if (ini->fend==FEND_FILE   ||ini->fend==FEND_FSTEREO||
         ini->fend==FEND_FGN3SV2||ini->fend==FEND_FGN3SV2||
@@ -279,52 +243,6 @@ extern int chk_initvalue(sdrini_t *ini)
     }
 
     return 0;
-}
-/* initialize mutex and event --------------------------------------------------
-* create mutex and event handles
-* args   : none
-* return : none
-*-----------------------------------------------------------------------------*/
-extern void openhandles(void)
-{
-    /* mutexes */
-    initmlock(hbuffmtx);
-    initmlock(hreadmtx);
-    initmlock(hfftmtx);
-    initmlock(hpltmtx);
-    initmlock(hobsmtx);
-    initmlock(hlexmtx);
-
-    /* events */
-    initevent(hlexeve);
-}
-/* close mutex and event -------------------------------------------------------
-* close mutex and event handles
-* args   : none
-* return : none
-*-----------------------------------------------------------------------------*/
-extern void closehandles(void)
-{
-    /* mutexes */
-    delmlock(hbuffmtx);
-    delmlock(hreadmtx);
-    delmlock(hfftmtx);
-    delmlock(hpltmtx);
-    delmlock(hobsmtx);
-    delmlock(hlexmtx);
-
-    /* events */
-    delevent(hlexeve);
-
-#ifdef WIN32
-    hbuffmtx=NULL;
-    hreadmtx=NULL;
-    hfftmtx=NULL;
-    hpltmtx=NULL;
-    hobsmtx=NULL;
-    hlexmtx=NULL;
-    hlexeve=NULL;
-#endif
 }
 /* initialize acquisition struct -----------------------------------------------
 * set value to acquisition struct
@@ -480,96 +398,21 @@ extern int initnavstruct(int sys, int ctype, int prn, sdrnav_t *nav)
         /* overlay code (all 1) */
         nav->ocode=(short *)calloc(nav->rate,sizeof(short));
         for (i=0;i<nav->rate;i++) nav->ocode[i]=1;
-    }
-    /* SBAS/QZS L1SAIF */
-    if (ctype==CTYPE_L1SAIF||ctype==CTYPE_L1SBAS) {
-        nav->rate=NAVRATE_SBAS;
-        nav->flen=NAVFLEN_SBAS;
-        nav->addflen=NAVADDFLEN_SBAS;
-        nav->prelen=NAVPRELEN_SBAS;
-        nav->sdreph.cntth=NAVEPHCNT_SBAS;
-        nav->update=(int)(nav->flen/3*nav->rate);
-        memcpy(nav->prebits,pre_sbs,sizeof(int)*nav->prelen);
 
-        /* create fec */
-        if((nav->fec=create_viterbi27_port(NAVFLEN_SBAS/2))==NULL) {
-            SDRPRINTF("error: create_viterbi27 failed\n");
-            return -1;
-        }
-        /* set polynomial */
-        set_viterbi27_polynomial_port(poly);
+	/* GEO (D2 NAV) */
+	} else {
+		nav->rate=NAVRATE_B1IG;
+		nav->flen=NAVFLEN_B1IG;
+		nav->addflen=NAVADDFLEN_B1IG;
+		nav->prelen=NAVPRELEN_B1IG;
+		nav->sdreph.cntth=NAVEPHCNT_B1IG;
+		nav->update=(int)(nav->flen*nav->rate);
+		memcpy(nav->prebits,pre_b1i,sizeof(int)*nav->prelen);
 
-        /* overlay code (all 1) */
-        nav->ocode=(short *)calloc(nav->rate,sizeof(short));
-        for (i=0;i<nav->rate;i++) nav->ocode[i]=1;
-    }
-    /* GLONASS G1 */
-    if (ctype==CTYPE_G1) {
-        nav->rate=NAVRATE_G1;
-        nav->flen=NAVFLEN_G1;
-        nav->addflen=NAVADDFLEN_G1;
-        nav->prelen=NAVPRELEN_G1;
-        nav->sdreph.cntth=NAVEPHCNT_G1;
-        nav->update=(int)(nav->flen*nav->rate);
-        memcpy(nav->prebits,pre_g1,sizeof(int)*nav->prelen);
-        nav->sdreph.geph.frq=prn; /* glonass frequency number */
-
-        /* overlay code (all 1) */
-        nav->ocode=(short *)calloc(nav->rate,sizeof(short));
-        for (i=0;i<nav->rate;i++) nav->ocode[i]=1;
-    }
-    /* Galileo E1B */
-    if (ctype==CTYPE_E1B) {
-        nav->rate=NAVRATE_E1B;
-        nav->flen=NAVFLEN_E1B;
-        nav->addflen=NAVADDFLEN_E1B;
-        nav->prelen=NAVPRELEN_E1B;
-        nav->sdreph.cntth=NAVEPHCNT_E1B;
-        nav->update=(int)(nav->flen*nav->rate);
-        memcpy(nav->prebits,pre_e1b,sizeof(int)*nav->prelen);
-
-        /* create fec */
-        if((nav->fec=create_viterbi27_port(120))==NULL) {
-            SDRPRINTF("error: create_viterbi27 failed\n");
-            return -1;
-        }
-        /* set polynomial */
-        set_viterbi27_polynomial_port(poly);
-
-        /* overlay code (all 1) */
-        nav->ocode=(short *)calloc(nav->rate,sizeof(short));
-        for (i=0;i<nav->rate;i++) nav->ocode[i]=1;
-    }
-    /* BeiDou B1I */
-    if (ctype==CTYPE_B1I) {
-        /* MEO/IGSO (D1 NAV) */
-        if (prn>5) {
-            nav->rate=NAVRATE_B1I;
-            nav->flen=NAVFLEN_B1I;
-            nav->addflen=NAVADDFLEN_B1I;
-            nav->prelen=NAVPRELEN_B1I;
-            nav->sdreph.cntth=NAVEPHCNT_B1I;
-            nav->update=(int)(nav->flen*nav->rate);
-            memcpy(nav->prebits,pre_b1i,sizeof(int)*nav->prelen);
-            
-            /* secondary code generation */
-            nav->ocode=gencode(-1,CTYPE_NH20,NULL,NULL);
-
-        /* GEO (D2 NAV) */
-        } else {
-            nav->rate=NAVRATE_B1IG;
-            nav->flen=NAVFLEN_B1IG;
-            nav->addflen=NAVADDFLEN_B1IG;
-            nav->prelen=NAVPRELEN_B1IG;
-            nav->sdreph.cntth=NAVEPHCNT_B1IG;
-            nav->update=(int)(nav->flen*nav->rate);
-            memcpy(nav->prebits,pre_b1i,sizeof(int)*nav->prelen);
-
-            /* overlay code (all 1) */
-            nav->ocode=(short *)calloc(nav->rate,sizeof(short));
-            for (i=0;i<nav->rate;i++) nav->ocode[i]=1;
-        }
-    }
+		/* overlay code (all 1) */
+		nav->ocode=(short *)calloc(nav->rate,sizeof(short));
+		for (i=0;i<nav->rate;i++) nav->ocode[i]=1;
+	}
 
     if (!(nav->bitsync= (int *)calloc(nav->rate,sizeof(int))) || 
         !(nav->fbits=   (int *)calloc(nav->flen+nav->addflen,sizeof(int))) ||
@@ -614,9 +457,7 @@ extern int initsdrch(int chno, int sys, int prn, int ctype, int dtype,
     sdr->flagacq=OFF;
     
     /* code generation */
-    if (!(sdr->code=gencode(prn,ctype,&sdr->clen,&sdr->crate))) {
-        SDRPRINTF("error: gencode\n"); return -1;
-    }
+    sdr->code=gencode(prn,ctype,&sdr->clen,&sdr->crate);
     sdr->ci=sdr->ti*sdr->crate;
     sdr->ctime=sdr->clen/sdr->crate;
     sdr->nsamp=(int)(f_sf*sdr->ctime);
@@ -697,7 +538,7 @@ extern void freesdrch(sdrch_t *sdr)
     free(sdr->acq.freq);
 
     if (sdr->nav.fec!=NULL)
-        delete_viterbi27_port(sdr->nav.fec);
+        // delete_viterbi27_port(sdr->nav.fec);
 
     if (sdr->nav.ocode!=NULL)
         free(sdr->nav.ocode);
